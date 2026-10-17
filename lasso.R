@@ -1,6 +1,6 @@
 ################################################################################
-# REGULARIZED META-REGRESSION: FINAL CORRECTED + EXTENDED SCRIPT
-# - Weighted variance for R^2_het (apparent, CV, penalized)
+# REGULARIZED META-REGRESSION: EXPLORATORY SCRIPT — NEEDS INDEPENDENT VALIDATION
+# - Weighted variance for R^2_het (apparent vs out-of-fold estimands distinguished)
 # - Robust dataset loaders
 # - Nested CV + permutation tests (n=1000)
 # - Paired bootstrap for headline comparison
@@ -18,6 +18,7 @@ suppressPackageStartupMessages({
 })
 
 set.seed(12345)
+source("R/validation_metrics.R")
 
 # ==============================================================================
 # HELPERS
@@ -108,7 +109,7 @@ cv_r2het <- function(y, v, X, method = "REML") {
   w_ok <- w[ok]; w_ok <- w_ok / sum(w_ok)
   vbar_w <- sum(w_ok * v[ok])
   tau2_cv <- max(0, sum(w_ok * res^2) - vbar_w)
-  safe_r2het(tau2_cv, tau2_null)
+  oof_r2het(tau2_cv, tau2_null)
 }
 
 # Penalized meta-regression (alpha=1 LASSO; alpha=0 Ridge)
@@ -165,7 +166,7 @@ cv_r2het <- function(y, v, X, method = "REML") {
   yhat_oof <- cv_fit$fit.preval[, idx]
   res_oof <- y - yhat_oof
   tau2_cv <- max(0, sum(w * res_oof^2) - vbar_w)
-  r2_cv <- safe_r2het(tau2_cv, tau2_null)
+  r2_cv <- oof_r2het(tau2_cv, tau2_null)
 
   # Selected features (exclude intercept)
   coefs <- as.matrix(coef(cv_fit, s = lam))
@@ -200,7 +201,12 @@ nested_cv_lasso <- function(y, v, X, method = "REML", lambda_choice = "lambda.mi
 
   for (i in seq_len(k)) {
     Xtr <- X[-i, , drop = FALSE]; ytr <- y[-i]; vtr <- v[-i]
-    wtr <- w[-i]; wtr <- wtr / sum(wtr)
+    # Compute inner-fold weights only from the training subset, not full-data tau^2.
+    train_null <- tryCatch(rma(yi = ytr, vi = vtr, method = method),
+                           error = function(e) NULL)
+    if (is.null(train_null)) next
+    wtr <- 1 / (vtr + train_null$tau2)
+    wtr <- wtr / sum(wtr)
 
     pf <- rep(1, ncol(Xtr))
     if (ncol(Xtr) == 1) {
@@ -239,7 +245,7 @@ nested_cv_lasso <- function(y, v, X, method = "REML", lambda_choice = "lambda.mi
   wok <- w[ok] / sum(w[ok])
   vbar_w <- sum(wok * v[ok])
   tau2_cv <- max(0, sum(wok * res^2) - vbar_w)
-  list(r2het_nested = safe_r2het(tau2_cv, tau2_null),
+  list(r2het_nested = oof_r2het(tau2_cv, tau2_null),
        lambda_variability = sd(lambdas_used, na.rm = TRUE) / mean(lambdas_used, na.rm = TRUE))
 }
 
@@ -258,7 +264,7 @@ permutation_test <- function(y, v, X, method = "REML", n_perm = 1000) {
     Xp <- if (is_intercept_column(X)) cbind(1, Xp) else cbind(1, Xp)  # ensure intercept
     perm_r2[p] <- lasso_meta_cv(y, v, Xp, method, lambda_choice = "lambda.min")$r2het
   }
-  pval <- mean(perm_r2 >= obs_r2)
+  pval <- permutation_pvalue(obs_r2, perm_r2)
   list(observed_r2 = obs_r2,
        perm_mean = mean(perm_r2), perm_sd = sd(perm_r2),
        p_value = pval,
@@ -592,7 +598,7 @@ cv_r2het_unweighted <- function(y, v, X, method = "REML") {
   res <- y[ok] - preds[ok]
   vbar <- mean(v[ok])
   tau2_cv <- max(0, mean(res^2) - vbar)
-  safe_r2het(tau2_cv, tau2_null)
+  oof_r2het(tau2_cv, tau2_null)
 }
 
 # ==============================================================================
