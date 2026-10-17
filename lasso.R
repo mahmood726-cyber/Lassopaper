@@ -161,7 +161,7 @@ cv_r2het <- function(y, v, X, method = "REML") {
   tau2_in <- max(0, sum(w * res_in^2) - vbar_w)
   r2_in <- safe_r2het(tau2_in, tau2_null)
 
-  # Out-of-fold R^2_het
+  # Internally prevalidated R^2_het (not independent nested CV; full-data weights).
   idx <- which.min(abs(log(cv_fit$lambda) - log(lam)))
   yhat_oof <- cv_fit$fit.preval[, idx]
   res_oof <- y - yhat_oof
@@ -272,7 +272,7 @@ permutation_test <- function(y, v, X, method = "REML", n_perm = 1000) {
 }
 
 # Plot glmnet CV curve with lambda.min / lambda.1se markers (ASCII labels)
-plot_cv_curve <- function(cv_fit, main = "Flat CV Surface Enables Noise Capitalization") {
+plot_cv_curve <- function(cv_fit, main = "Cross-validation curve (exploratory)") {
   if (is.null(cv_fit) || is.atomic(cv_fit)) {
     message("No cv.glmnet object available to plot.")
     return(invisible(NULL))
@@ -537,8 +537,8 @@ p1 <- ggplot(optimism_data, aes(x = Method, y = Optimism)) +
            fill = c("gray50", "red3", "blue3", "red3", "blue3")) +
   geom_hline(yintercept = optimism_data$Optimism[1],
              linetype = "dashed", alpha = 0.5) +
-  labs(title = "The Regularization Paradox",
-       subtitle = "lambda.min increases optimism; lambda.1se provides minimal benefit",
+  labs(title = "Exploratory optimism comparison",
+       subtitle = "Hypothesis-generating: full independent validation required",
        y = "Mean Optimism in R^2_het (%)",
        x = "") +
   theme_minimal() +
@@ -559,7 +559,7 @@ p2 <- ggplot(plot_long, aes(x = k_p_ratio, y = value, color = variable)) +
   scale_color_manual(values = c("gray50", "red3", "blue3"),
                      labels = c("Standard", "lambda.min (LASSO)", "lambda.1se (LASSO)")) +
   labs(title = "Optimism by Sample Size Ratio",
-       subtitle = "Paradox most severe at k/p < 10",
+       subtitle = "Small sample sizes: descriptive comparisons only",
        x = "k/p Ratio",
        y = "Optimism (%)",
        color = "Method") +
@@ -574,7 +574,7 @@ safe_ggsave("fig2_optimism_by_ratio.pdf", p2, width = 7, height = 5)
 # Example CV curve from first dataset (if available)
 cv_obj <- attr(all_results, "cv_curve_lasso_min")
 if (!is.null(cv_obj) && length(cv_obj) >= 1) {
-  plot_cv_curve(cv_obj[[1]], main = "Flat CV Surface Enables Noise Capitalization (Example)")
+  plot_cv_curve(cv_obj[[1]], main = "Illustrative cross-validation curve")
 }
 
 # ==============================================================================
